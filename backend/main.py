@@ -2,16 +2,17 @@
 Toing Discount Triage — FastAPI backend.
 
 MOCK_MODE=true  (default): returns baked responses for the 4 test orders.
-MOCK_MODE=false: queries live Snowflake via key-pair auth.
+MOCK_MODE=false: queries live Snowflake using the user's PAT from X-SF-Token header.
 
 Run:
     uvicorn main:app --reload
 """
 
 import os
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Optional
 from mock_data import MOCK_ORDERS
 
 MOCK_MODE = os.getenv("MOCK_MODE", "true").lower() == "true"
@@ -37,7 +38,10 @@ def health():
 
 
 @app.post("/api/order")
-def get_order(req: OrderRequest):
+def get_order(
+    req: OrderRequest,
+    x_sf_token: Optional[str] = Header(default=None),
+):
     order_id = req.order_id.strip()
     if not order_id:
         raise HTTPException(status_code=400, detail="order_id is required")
@@ -54,13 +58,17 @@ def get_order(req: OrderRequest):
         )
 
     # ── Live Snowflake path ───────────────────────────────────────────────────
+    if not x_sf_token:
+        raise HTTPException(
+            status_code=401,
+            detail="No Snowflake token provided. Add your PAT via X-SF-Token header.",
+        )
+
     try:
         from snowflake_client import run_order_query
-        return run_order_query(order_id)
-    except ImportError:
-        raise HTTPException(
-            status_code=503,
-            detail="Snowflake connector not configured. Set MOCK_MODE=false only when snowflake_client.py is set up.",
-        )
+        return run_order_query(order_id, x_sf_token)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        msg = str(exc)
+        if "Authentication" in msg or "token" in msg.lower():
+            raise HTTPException(status_code=401, detail="Snowflake token invalid or expired. Please re-enter your PAT.")
+        raise HTTPException(status_code=500, detail=msg)

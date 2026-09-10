@@ -8,8 +8,6 @@ services:
     envVars:
       - key: MOCK_MODE
         value: false
-      - key: SF_USER
-        sync: false
       - key: SF_ACCOUNT
         value: GZAVXAB-SWIGGY_MUMBAI
       - key: SF_WAREHOUSE
@@ -20,5 +18,3 @@ services:
         value: ANALYTICS
       - key: SF_SCHEMA
         value: PUBLIC
-      - key: SF_PRIVATE_KEY_B64
-        sync: false
