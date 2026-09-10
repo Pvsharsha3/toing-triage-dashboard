@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: toing-triage-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: MOCK_MODE
+        value: false
+      - key: SF_USER
+        sync: false
+      - key: SF_ACCOUNT
+        value: GZAVXAB-SWIGGY_MUMBAI
+      - key: SF_WAREHOUSE
+        value: ANALYST_SCHEDULES_WH_02
+      - key: SF_ROLE
+        value: FOOD_RANDG
+      - key: SF_DATABASE
+        value: ANALYTICS
+      - key: SF_SCHEMA
+        value: PUBLIC
+      - key: SF_PRIVATE_KEY_B64
+        sync: false

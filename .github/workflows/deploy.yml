@@ -36,7 +36,7 @@ jobs:
           # Sets the Vite base path to /<repo-name>/ for GitHub Pages
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
           # Set VITE_API_URL to your Render/Railway backend URL once deployed
-          # VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
         run: npm run build
 
       - name: Upload Pages artifact
