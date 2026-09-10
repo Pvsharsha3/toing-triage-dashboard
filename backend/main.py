@@ -1,18 +1,23 @@
 """
 Toing Discount Triage — FastAPI backend.
 
-MOCK_MODE=true  (default): returns baked responses for the 4 test orders.
-MOCK_MODE=false: queries live Snowflake using the user's PAT from X-SF-Token header.
+MOCK_MODE=true  (default when no .env): returns baked responses for 4 test orders.
+MOCK_MODE=false: queries live Snowflake using externalbrowser SSO (like SAGE).
 
-Run:
+Run locally:
     uvicorn main:app --reload
 """
 
 import os
-from fastapi import FastAPI, HTTPException, Header
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent / ".env")
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import Optional
 from mock_data import MOCK_ORDERS
 
 MOCK_MODE = os.getenv("MOCK_MODE", "true").lower() == "true"
@@ -38,10 +43,7 @@ def health():
 
 
 @app.post("/api/order")
-def get_order(
-    req: OrderRequest,
-    x_sf_token: Optional[str] = Header(default=None),
-):
+def get_order(req: OrderRequest):
     order_id = req.order_id.strip()
     if not order_id:
         raise HTTPException(status_code=400, detail="order_id is required")
@@ -51,24 +53,23 @@ def get_order(
             return MOCK_ORDERS[order_id]
         raise HTTPException(
             status_code=404,
-            detail=(
-                f"Order {order_id} not in demo set. "
-                f"Demo orders: {', '.join(MOCK_ORDERS.keys())}"
-            ),
-        )
-
-    # ── Live Snowflake path ───────────────────────────────────────────────────
-    if not x_sf_token:
-        raise HTTPException(
-            status_code=401,
-            detail="No Snowflake token provided. Add your PAT via X-SF-Token header.",
+            detail=f"Order {order_id} not in demo set. Demo orders: {', '.join(MOCK_ORDERS.keys())}",
         )
 
     try:
         from snowflake_client import run_order_query
-        return run_order_query(order_id, x_sf_token)
+        return run_order_query(order_id)
     except Exception as exc:
         msg = str(exc)
-        if "Authentication" in msg or "token" in msg.lower():
-            raise HTTPException(status_code=401, detail="Snowflake token invalid or expired. Please re-enter your PAT.")
         raise HTTPException(status_code=500, detail=msg)
+
+
+# ── Serve frontend static files ───────────────────────────────────────────────
+FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
+
+if FRONTEND_DIST.exists():
+    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    def serve_frontend(full_path: str):
+        return FileResponse(FRONTEND_DIST / "index.html")
