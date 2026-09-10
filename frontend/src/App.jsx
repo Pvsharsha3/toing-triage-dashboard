@@ -37,79 +37,149 @@ async function fetchOrder(orderId, sfToken) {
   return data
 }
 
-// ── PAT Connect Panel ─────────────────────────────────────────────────────────
+// ── SSO Connect Panel ─────────────────────────────────────────────────────────
+const SF_PAT_URL = 'https://app.snowflake.com/gzavxab/swiggy_mumbai/#/me/programmatic-access'
+
 function ConnectPanel({ onConnect }) {
+  const [step, setStep] = useState('idle') // idle | waiting | pasting | connecting
   const [token, setToken] = useState('')
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
 
-  const connect = async () => {
-    if (!token.trim()) return
-    setLoading(true)
+  // Open Snowflake in a new tab and move to "waiting for paste" step
+  const openSnowflake = () => {
+    window.open(SF_PAT_URL, '_blank', 'noopener,noreferrer')
+    setStep('waiting')
+    setToken('')
+    setError('')
+  }
+
+  // Auto-connect the moment the user pastes (no button needed)
+  const handlePaste = async (e) => {
+    const pasted = (e.clipboardData?.getData('text') || '').trim()
+    if (!pasted) return
+    setToken(pasted)
+    setStep('connecting')
     setError('')
     try {
-      // Quick validation: hit /api/health — if backend accepts, store token
       const res = await fetch(`${API_URL}/api/health`)
-      if (!res.ok) throw new Error('Backend unreachable')
+      if (!res.ok) throw new Error('Backend unreachable — make sure the server is running.')
+      sessionStorage.setItem('sf_token', pasted)
+      onConnect(pasted)
+    } catch (e) {
+      setError(e.message)
+      setStep('waiting')
+    }
+  }
+
+  // Fallback: manual connect button (for users who typed instead of pasting)
+  const connectManual = async () => {
+    if (!token.trim()) return
+    setStep('connecting')
+    setError('')
+    try {
+      const res = await fetch(`${API_URL}/api/health`)
+      if (!res.ok) throw new Error('Backend unreachable.')
       sessionStorage.setItem('sf_token', token.trim())
       onConnect(token.trim())
     } catch (e) {
       setError(e.message)
-    } finally {
-      setLoading(false)
+      setStep('waiting')
     }
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 w-full max-w-md">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-orange-500 flex items-center justify-center text-white font-bold text-xl">T</div>
-          <div>
-            <h1 className="text-lg font-semibold text-slate-800">Toing Discount Triage</h1>
-            <p className="text-xs text-slate-500">Connect with your Snowflake account</p>
-          </div>
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+      <div className="w-full max-w-sm">
+        {/* Logo */}
+        <div className="flex flex-col items-center mb-8">
+          <div className="w-14 h-14 rounded-2xl bg-orange-500 flex items-center justify-center text-white font-bold text-3xl shadow-lg mb-3">T</div>
+          <h1 className="text-xl font-semibold text-white">Toing Discount Triage</h1>
+          <p className="text-slate-400 text-sm mt-1">Sign in with your Swiggy Snowflake account</p>
         </div>
 
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 text-xs text-blue-700 space-y-1">
-          <p className="font-semibold text-blue-800">Get your Snowflake Personal Access Token:</p>
-          <ol className="list-decimal list-inside space-y-0.5">
-            <li>Go to <span className="font-mono">app.snowflake.com</span> (log in with Swiggy SSO)</li>
-            <li>Click your avatar (top right) → <strong>My Profile</strong></li>
-            <li>Programmatic Access Tokens → <strong>Add Token</strong></li>
-            <li>Copy the token and paste below</li>
-          </ol>
-          <p className="text-blue-500 mt-1">Token stays in your browser session only — never sent to any server except Snowflake.</p>
+        <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+          {step === 'idle' && (
+            <>
+              <button
+                onClick={openSnowflake}
+                className="w-full py-3 rounded-xl bg-[#29B5E8] hover:bg-[#22a5d4] text-white font-semibold text-sm flex items-center justify-center gap-2.5 transition-colors shadow"
+              >
+                {/* Snowflake icon */}
+                <svg width="20" height="20" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M24 4L24 44M24 4L17 11M24 4L31 11M24 44L17 37M24 44L31 37M4 24H44M4 24L11 17M4 24L11 31M44 24L37 17M44 24L37 31M8.7 10.7L39.3 37.3M8.7 10.7L17.3 11.3M8.7 10.7L8 19.3M39.3 37.3L30.7 36.7M39.3 37.3L40 28.7M39.3 10.7L8.7 37.3M39.3 10.7L30.7 11.3M39.3 10.7L40 19.3M8.7 37.3L17.3 36.7M8.7 37.3L8 28.7" stroke="white" strokeWidth="3" strokeLinecap="round"/>
+                </svg>
+                Sign in with Swiggy SSO
+              </button>
+              <p className="text-xs text-slate-500 text-center mt-3">
+                Opens Snowflake in a new tab — log in with your Swiggy Google account
+              </p>
+            </>
+          )}
+
+          {(step === 'waiting' || step === 'connecting' || step === 'pasting') && (
+            <>
+              {/* Progress steps */}
+              <div className="flex items-center gap-2 mb-5">
+                <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-white text-xs font-bold">✓</div>
+                <span className="text-xs text-green-400">Opened Snowflake</span>
+              </div>
+
+              <div className="bg-slate-700 rounded-xl p-4 mb-4 text-xs text-slate-300 space-y-2">
+                <p className="font-medium text-white">In the Snowflake tab:</p>
+                <ol className="list-decimal list-inside space-y-1 text-slate-400">
+                  <li>Click <strong className="text-slate-200">+ Token</strong> → give it any name → <strong className="text-slate-200">Create</strong></li>
+                  <li>Click <strong className="text-slate-200">Copy to clipboard</strong></li>
+                  <li>Come back here and paste</li>
+                </ol>
+              </div>
+
+              <div className="relative">
+                <textarea
+                  autoFocus
+                  rows={3}
+                  value={token}
+                  onChange={e => setToken(e.target.value)}
+                  onPaste={handlePaste}
+                  placeholder="Paste token here (Ctrl+V / Cmd+V)…"
+                  className="w-full px-3 py-3 rounded-xl bg-slate-900 border border-slate-600 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-[#29B5E8] resize-none"
+                />
+                {step === 'connecting' && (
+                  <div className="absolute inset-0 rounded-xl bg-slate-900/70 flex items-center justify-center">
+                    <span className="text-xs text-[#29B5E8]">Connecting…</span>
+                  </div>
+                )}
+              </div>
+
+              {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
+
+              {token && step !== 'connecting' && (
+                <button
+                  onClick={connectManual}
+                  className="mt-3 w-full py-2.5 rounded-xl bg-[#29B5E8] hover:bg-[#22a5d4] text-white text-sm font-semibold transition-colors"
+                >
+                  Connect
+                </button>
+              )}
+
+              <button
+                onClick={() => { setStep('idle'); setToken(''); setError('') }}
+                className="mt-2 w-full text-xs text-slate-600 hover:text-slate-400 transition-colors py-1"
+              >
+                ← Back
+              </button>
+            </>
+          )}
+
+          {error && step === 'idle' && (
+            <p className="text-xs text-red-400 mt-3 text-center">{error}</p>
+          )}
         </div>
-
-        <label className="block text-sm font-medium text-slate-700 mb-1.5">
-          Personal Access Token
-        </label>
-        <textarea
-          value={token}
-          onChange={e => setToken(e.target.value)}
-          placeholder="Paste your Snowflake PAT here…"
-          rows={3}
-          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
-        />
-
-        {error && (
-          <p className="text-xs text-red-600 mt-2">{error}</p>
-        )}
-
-        <button
-          onClick={connect}
-          disabled={loading || !token.trim()}
-          className="mt-4 w-full py-2.5 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white rounded-lg text-sm font-medium transition-colors"
-        >
-          {loading ? 'Connecting…' : 'Connect to Snowflake'}
-        </button>
 
         <button
           onClick={() => onConnect(null)}
-          className="mt-2 w-full py-2 text-xs text-slate-400 hover:text-slate-600 transition-colors"
+          className="mt-4 w-full text-xs text-slate-600 hover:text-slate-400 transition-colors py-2"
         >
-          Use demo mode instead (4 test orders)
+          Use demo mode (4 test orders, no login needed)
         </button>
       </div>
     </div>
